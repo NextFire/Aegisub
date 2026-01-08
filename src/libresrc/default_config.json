@@ -32,6 +32,7 @@
 			},
 			"Type" : 1
 		},
+		"Downmix" : false,
 		"Colour Schemes" : [
 			{ "string" : "Green" },
 			{ "string" : "Icy Blue" }

@@ -165,14 +165,18 @@ void FFmpegSourceAudioProvider::LoadAudio(agi::fs::path const& filename) {
 	}
 
 	if (channels > 1 || bytes_per_sample != 2) {
+		// Request FFMS2 to convert to S16 format, and optionally to mono
+		bool downmix = OPT_GET("Audio/Downmix")->GetBool();
 		std::unique_ptr<FFMS_ResampleOptions, decltype(&FFMS_DestroyResampleOptions)>
 			opt(FFMS_CreateResampleOptions(AudioSource), FFMS_DestroyResampleOptions);
-		opt->ChannelLayout = FFMS_CH_FRONT_CENTER;
+		if (downmix)
+			opt->ChannelLayout = FFMS_CH_FRONT_CENTER;
 		opt->SampleFormat = FFMS_FMT_S16;
 
 		// Might fail if FFMS2 wasn't built with libavresample
 		if (!FFMS_SetOutputFormatA(AudioSource, opt.get(), nullptr)) {
-			channels = 1;
+			if (downmix)
+				channels = 1;
 			bytes_per_sample = 2;
 			float_samples = false;
 		}

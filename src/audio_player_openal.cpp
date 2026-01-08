@@ -70,6 +70,8 @@ class OpenALPlayer final : public AudioPlayer, wxTimer {
 	float volume = 1.f; ///< Current audio volume
 	ALsizei samplerate; ///< Sample rate of the audio
 	int bpf; ///< Bytes per frame
+	int channels; ///< Number of audio channels
+	ALenum al_format; ///< OpenAL buffer format (mono or stereo)
 
 	int64_t start_frame = 0; ///< First frame of playback
 	int64_t cur_frame = 0; ///< Next frame to write to playback buffers
@@ -96,6 +98,9 @@ class OpenALPlayer final : public AudioPlayer, wxTimer {
 
 	/// Buffer to decode audio into
 	std::vector<char> decode_buffer;
+
+	/// Buffer for downmixing >2 channels to stereo
+	std::vector<int16_t> downmix_buffer;
 
 	/// Fill count OpenAL buffers
 	void FillBuffers(ALsizei count);
@@ -125,12 +130,26 @@ OpenALPlayer::OpenALPlayer(agi::AudioProvider *provider)
 : AudioPlayer(provider)
 , samplerate(provider->GetSampleRate())
 , bpf(provider->GetChannels() * provider->GetBytesPerSample())
+, channels(provider->GetChannels())
 {
 	device = alcOpenDevice(nullptr);
 	if (!device) throw AudioPlayerOpenError("Failed opening default OpenAL device");
 
-	// Determine buffer length
-	decode_buffer.resize(samplerate * bpf / num_buffers / 2); // buffers for half a second of audio
+	// OpenAL only supports mono and stereo formats.
+	// For >2 channels, we'll downmix to stereo during playback.
+	if (channels == 1)
+		al_format = AL_FORMAT_MONO16;
+	else
+		al_format = AL_FORMAT_STEREO16;
+
+	// Allocate decode buffer for half a second of audio
+	decode_buffer.resize(samplerate * bpf / num_buffers / 2);
+
+	// Allocate stereo downmix buffer for surround audio (>2 channels)
+	if (channels > 2) {
+		size_t samples_per_buffer = decode_buffer.size() / bpf;
+		downmix_buffer.resize(samples_per_buffer * 2); // 2 int16_t per frame
+	}
 }
 
 OpenALPlayer::~OpenALPlayer()
@@ -247,7 +266,29 @@ void OpenALPlayer::FillBuffers(ALsizei count)
 
 		cur_frame += fill_len;
 
-		alBufferData(buffers[buf_first_free], AL_FORMAT_MONO16, &decode_buffer[0], decode_buffer.size(), samplerate);
+		// OpenAL only supports mono/stereo, so downmix surround audio to stereo
+		if (channels > 2) {
+			auto src = reinterpret_cast<int16_t*>(&decode_buffer[0]);
+			size_t samples_per_buffer = decode_buffer.size() / bpf;
+			for (size_t i = 0; i < samples_per_buffer; ++i) {
+				int32_t left = src[i * channels];
+				int32_t right = src[i * channels + 1];
+				// Mix remaining channels into left/right
+				for (int c = 2; c < channels; ++c) {
+					if (c % 2 == 0)
+						left += src[i * channels + c];
+					else
+						right += src[i * channels + c];
+				}
+				// Average to prevent clipping
+				int divisor = (channels + 1) / 2;
+				downmix_buffer[i * 2] = static_cast<int16_t>(left / divisor);
+				downmix_buffer[i * 2 + 1] = static_cast<int16_t>(right / divisor);
+			}
+			alBufferData(buffers[buf_first_free], al_format, &downmix_buffer[0], samples_per_buffer * 4, samplerate);
+		} else {
+			alBufferData(buffers[buf_first_free], al_format, &decode_buffer[0], decode_buffer.size(), samplerate);
+		}
 		alSourceQueueBuffers(source, 1, &buffers[buf_first_free]); // FIXME: collect buffer handles and queue all at once instead of one at a time?
 		buf_first_free = (buf_first_free + 1) % num_buffers;
 		--buffers_free;

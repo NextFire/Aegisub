@@ -43,11 +43,14 @@ class AudioWaveformRenderer final : public AudioRendererBitmapProvider {
 	/// Pre-allocated buffer for audio fetched from provider
 	std::unique_ptr<char[]> audio_buffer;
 
+	/// Size of the allocated audio buffer
+	size_t audio_buffer_size = 0;
+
 	/// Whether to render max+avg or just max
 	bool render_averages;
 
-	void OnSetProvider() override { audio_buffer.reset(); }
-	void OnSetMillisecondsPerPixel() override { audio_buffer.reset(); }
+	void OnSetProvider() override { audio_buffer.reset(); audio_buffer_size = 0; }
+	void OnSetMillisecondsPerPixel() override { audio_buffer.reset(); audio_buffer_size = 0; }
 
 public:
 	/// @brief Constructor

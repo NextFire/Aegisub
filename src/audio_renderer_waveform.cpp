@@ -70,18 +70,19 @@ void AudioWaveformRenderer::Render(wxBitmap &bmp, int start, AudioRenderingStyle
 	dc.SetPen(*wxTRANSPARENT_PEN);
 	dc.DrawRectangle(rect);
 
-	// Make sure we've got a buffer to fill with audio data
-	if (!audio_buffer)
+	int channels = provider->GetChannels();
+
+	// Ensure audio buffer is large enough for multi-channel data
+	size_t buffer_needed = static_cast<size_t>(pixel_samples + 1) * channels * provider->GetBytesPerSample();
+	if (!audio_buffer || audio_buffer_size < buffer_needed)
 	{
-		// Buffer for one pixel strip of audio
-		size_t buffer_needed = pixel_samples * provider->GetChannels() * provider->GetBytesPerSample();
 		audio_buffer.reset(new char[buffer_needed]);
+		audio_buffer_size = buffer_needed;
 	}
 
 	double cur_sample = start * pixel_samples;
 
 	assert(provider->GetBytesPerSample() == 2);
-	assert(provider->GetChannels() == 1);
 
 	wxPen pen_peaks(wxPen(pal->get(0.4f)));
 	wxPen pen_avgs(wxPen(pal->get(0.7f)));
@@ -94,17 +95,24 @@ void AudioWaveformRenderer::Render(wxBitmap &bmp, int start, AudioRenderingStyle
 		int peak_min = 0, peak_max = 0;
 		int64_t avg_min_accum = 0, avg_max_accum = 0;
 		auto aud = reinterpret_cast<const int16_t *>(audio_buffer.get());
-		for (int si = pixel_samples; si > 0; --si, ++aud)
+
+		// Average all channels together for waveform display
+		for (int si = pixel_samples; si > 0; --si)
 		{
-			if (*aud > 0)
+			int sample_sum = 0;
+			for (int ch = 0; ch < channels; ++ch)
+				sample_sum += *aud++;
+			int16_t sample = static_cast<int16_t>(sample_sum / channels);
+
+			if (sample > 0)
 			{
-				peak_max = std::max(peak_max, (int)*aud);
-				avg_max_accum += *aud;
+				peak_max = std::max(peak_max, (int)sample);
+				avg_max_accum += sample;
 			}
 			else
 			{
-				peak_min = std::min(peak_min, (int)*aud);
-				avg_min_accum += *aud;
+				peak_min = std::min(peak_min, (int)sample);
+				avg_min_accum += sample;
 			}
 		}
 

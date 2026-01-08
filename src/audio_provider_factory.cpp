@@ -102,9 +102,13 @@ std::unique_ptr<agi::AudioProvider> GetAudioProvider(fs::path const& filename,
 
 	bool needs_cache = provider->NeedsCache();
 
-	// Give it a converter if needed
-	if (provider->GetBytesPerSample() != 2 || provider->GetSampleRate() < 32000 || provider->GetChannels() != 1)
-		provider = CreateConvertAudioProvider(std::move(provider));
+	// Convert audio to a format suitable for playback and display:
+	// - Always convert to 16-bit samples
+	// - Upsample if sample rate < 32kHz
+	// - Optionally downmix to mono if Audio/Downmix is enabled
+	bool downmix = OPT_GET("Audio/Downmix")->GetBool();
+	if (provider->GetBytesPerSample() != 2 || provider->GetSampleRate() < 32000 || (downmix && provider->GetChannels() != 1))
+		provider = CreateConvertAudioProvider(std::move(provider), !downmix);
 
 	// Change provider to RAM/HD cache if needed
 	auto cache = OPT_GET("Audio/Cache/Type")->GetInt();

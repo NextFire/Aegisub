@@ -178,7 +178,7 @@ public:
 }
 
 namespace agi {
-std::unique_ptr<AudioProvider> CreateConvertAudioProvider(std::unique_ptr<AudioProvider> provider) {
+std::unique_ptr<AudioProvider> CreateConvertAudioProvider(std::unique_ptr<AudioProvider> provider, bool preserve_channels) {
 	// Ensure 16-bit audio with proper endianness
 	if (provider->AreSamplesFloat()) {
 		LOG_D("audio_provider") << "Converting float to S16";
@@ -192,8 +192,8 @@ std::unique_ptr<AudioProvider> CreateConvertAudioProvider(std::unique_ptr<AudioP
 		provider = std::make_unique<BitdepthConvertAudioProvider<int16_t>>(std::move(provider));
 	}
 
-	// We currently only support mono audio
-	if (provider->GetChannels() != 1) {
+	// Downmix to mono if requested (preserve_channels=false)
+	if (!preserve_channels && provider->GetChannels() != 1) {
 		LOG_D("audio_provider") << "Downmixing to mono from " << provider->GetChannels() << " channels";
 		provider = std::make_unique<DownmixAudioProvider>(std::move(provider));
 	}

@@ -36,7 +36,8 @@ void AudioProvider::GetAudioWithVolume(void *buf, int64_t start, int64_t count, 
 		throw agi::InternalError("GetAudioWithVolume called on unconverted audio stream");
 
 	auto buffer = static_cast<int16_t *>(buf);
-	for (size_t i = 0; i < (size_t)count; ++i)
+	// Process all samples: count frames * channels samples per frame
+	for (size_t i = 0; i < (size_t)(count * channels); ++i)
 		buffer[i] = util::mid(-0x8000, static_cast<int>(buffer[i] * volume + 0.5), 0x7FFF);
 }
 

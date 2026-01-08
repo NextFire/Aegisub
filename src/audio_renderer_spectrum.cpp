@@ -207,7 +207,25 @@ void AudioSpectrumRenderer::FillBlock(size_t block_index, float *block)
 	assert(block);
 
 	int64_t first_sample = (((int64_t)block_index) << derivation_dist) - ((int64_t)1 << derivation_size);
-	provider->GetAudio(&audio_scratch[0], first_sample, 2 << derivation_size);
+	int channels = provider->GetChannels();
+
+	if (channels == 1) {
+		// Simple case: mono audio
+		provider->GetAudio(&audio_scratch[0], first_sample, 2 << derivation_size);
+	} else {
+		// Multi-channel: fetch audio and average to mono for spectrum analysis
+		std::vector<int16_t> multi_buffer((2 << derivation_size) * channels);
+		provider->GetAudio(&multi_buffer[0], first_sample, 2 << derivation_size);
+
+		// Average all channels into audio_scratch
+		for (size_t i = 0; i < ((size_t)2 << derivation_size); ++i) {
+			int sum = 0;
+			for (int ch = 0; ch < channels; ++ch) {
+				sum += multi_buffer[i * channels + ch];
+			}
+			audio_scratch[i] = sum / channels;
+		}
+	}
 
 	// Because the FFTs used here are unnormalized DFTs, we have to compensate
 	// the possible length difference between derivation_size used in the

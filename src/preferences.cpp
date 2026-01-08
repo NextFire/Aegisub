@@ -387,6 +387,9 @@ void Advanced_Audio(wxTreebook *book, Preferences *parent) {
 	wxArrayString apl_choice = to_wx(AudioPlayerFactory::GetClasses());
 	p->OptionChoice(expert, _("Audio player"), apl_choice, "Audio/Player");
 
+	p->CellSkip(expert);
+	p->OptionAdd(expert, _("Downmix audio to mono"), "Audio/Downmix");
+
 	auto cache = p->PageSizer(_("Cache"));
 	const wxString ct_arr[3] = { _("None (NOT RECOMMENDED)"), _("RAM"), _("Hard Disk") };
 	wxArrayString ct_choice(3, ct_arr);
