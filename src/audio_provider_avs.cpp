@@ -108,10 +108,6 @@ void AvisynthAudioProvider::LoadFromClip(AVSValue clip) {
 	IScriptEnvironment *env = avs_wrapper.GetEnv();
 
 	AVSValue script = clip;
-	// Only convert to mono if multichannel playback is disabled
-	if (OPT_GET("Audio/Downmix")->GetBool()) {
-		script = env->Invoke(OPT_GET("Audio/Downmixer")->GetString().c_str(), clip);
-	}
 
 	// Convert to 16 bits per sample
 	script = env->Invoke("ConvertAudioTo16bit", script);

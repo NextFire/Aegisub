@@ -114,32 +114,6 @@ public:
 	}
 };
 
-/// Non-mono 16-bit signed machine-endian -> mono 16-bit signed machine endian converter
-class DownmixAudioProvider final : public AudioProviderWrapper {
-	int src_channels;
-	mutable std::vector<int16_t> src_buf;
-
-public:
-	DownmixAudioProvider(std::unique_ptr<AudioProvider> src) : AudioProviderWrapper(std::move(src)) {
-		src_channels = channels;
-		channels = 1;
-	}
-
-	void FillBuffer(void *buf, int64_t start, int64_t count) const override {
-		src_buf.resize(count * src_channels);
-		source->GetAudio(&src_buf[0], start, count);
-
-		auto dst = static_cast<int16_t*>(buf);
-		// Just average the channels together
-		while (count-- > 0) {
-			int sum = 0;
-			for (int c = 0; c < src_channels; ++c)
-				sum += src_buf[count * src_channels + c];
-			dst[count] = static_cast<int16_t>(sum / src_channels);
-		}
-	}
-};
-
 /// Sample doubler with linear interpolation for the samples provider
 /// Requires 16-bit mono input
 class SampleDoublingAudioProvider final : public AudioProviderWrapper {
@@ -178,7 +152,7 @@ public:
 }
 
 namespace agi {
-std::unique_ptr<AudioProvider> CreateConvertAudioProvider(std::unique_ptr<AudioProvider> provider, bool preserve_channels) {
+std::unique_ptr<AudioProvider> CreateConvertAudioProvider(std::unique_ptr<AudioProvider> provider) {
 	// Ensure 16-bit audio with proper endianness
 	if (provider->AreSamplesFloat()) {
 		LOG_D("audio_provider") << "Converting float to S16";
@@ -190,12 +164,6 @@ std::unique_ptr<AudioProvider> CreateConvertAudioProvider(std::unique_ptr<AudioP
 	if (provider->GetBytesPerSample() != 2) {
 		LOG_D("audio_provider") << "Converting " << provider->GetBytesPerSample() << " bytes per sample or wrong endian to S16";
 		provider = std::make_unique<BitdepthConvertAudioProvider<int16_t>>(std::move(provider));
-	}
-
-	// Downmix to mono if requested (preserve_channels=false)
-	if (!preserve_channels && provider->GetChannels() != 1) {
-		LOG_D("audio_provider") << "Downmixing to mono from " << provider->GetChannels() << " channels";
-		provider = std::make_unique<DownmixAudioProvider>(std::move(provider));
 	}
 
 	// Some players don't like low sample rate audio
